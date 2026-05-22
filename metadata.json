@@ -1,0 +1,6 @@
+{
+  "name": "ANN - Sitios Web con IA en 48 Horas",
+  "description": "Landing page profesional para vender sitios web construidos con Inteligencia Artificial y entregados listos en 48 horas. Incluye demostración interactiva de planeación de sitios web con IA, formulario de contacto integrado y generador de HTML estático listo para cPanel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

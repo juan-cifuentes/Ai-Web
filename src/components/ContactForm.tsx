@@ -1,0 +1,454 @@
+import React, { useState, useEffect } from 'react';
+import { Mail, Phone, Send, CheckSquare, RefreshCw, User, MessageSquare, Database } from 'lucide-react';
+import { ContactFormInput } from '../types';
+import { initAuth, googleSignIn, logout, appendToGoogleSheet } from '../lib/googleSheetsService';
+import { User as FirebaseUser } from 'firebase/auth';
+
+interface ContactFormProps {
+  selectedPlan: string;
+  prefilledDetails: string;
+  onClearPrefilled: () => void;
+}
+
+export default function ContactForm({ selectedPlan, prefilledDetails, onClearPrefilled }: ContactFormProps) {
+  const [formData, setFormData] = useState<ContactFormInput>({
+    name: '',
+    email: '',
+    phone: '',
+    plan: 'profesional',
+    details: '',
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // Google Sheets state
+  const [googleUser, setGoogleUser] = useState<FirebaseUser | null>(null);
+  const [googleToken, setGoogleToken] = useState<string | null>(null);
+  const [isSheetsLoading, setIsSheetsLoading] = useState(false);
+  const [sheetsSuccessMessage, setSheetsSuccessMessage] = useState('');
+  const [sheetsErrorMsg, setSheetsErrorMsg] = useState('');
+  const [sheetsAppendedStatus, setSheetsAppendedStatus] = useState<boolean | null>(null);
+
+  // Initialize Auth state listener
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user, token) => {
+        setGoogleUser(user);
+        setGoogleToken(token);
+      },
+      () => {
+        setGoogleUser(null);
+        setGoogleToken(null);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setIsSheetsLoading(true);
+    setSheetsErrorMsg('');
+    try {
+      const result = await googleSignIn();
+      if (result) {
+        setGoogleUser(result.user);
+        setGoogleToken(result.accessToken);
+        setSheetsSuccessMessage('¡Google Sheets conectado con éxito!');
+        setTimeout(() => setSheetsSuccessMessage(''), 4000);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setSheetsErrorMsg(err?.message || 'Error al conectar con Google Sheets.');
+    } finally {
+      setIsSheetsLoading(false);
+    }
+  };
+
+  const handleGoogleSignOut = async () => {
+    try {
+      await logout();
+      setGoogleUser(null);
+      setGoogleToken(null);
+      setSheetsAppendedStatus(null);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Sincronizar planes seleccionados externamente y prescripciones de IA
+  useEffect(() => {
+    if (selectedPlan) {
+      setFormData((prev) => ({ ...prev, plan: selectedPlan }));
+    }
+  }, [selectedPlan]);
+
+  useEffect(() => {
+    if (prefilledDetails) {
+      setFormData((prev) => ({ ...prev, details: prefilledDetails }));
+    }
+  }, [prefilledDetails]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMessage('');
+    setSheetsErrorMsg('');
+    setSheetsAppendedStatus(null);
+    setSuccess(false);
+
+    try {
+      // 1. Submit to local Express server configuration
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Hubo un error con el servidor.');
+      }
+
+      const data = await response.json();
+      
+      // 2. Append to Google Sheets if token exists
+      let wasAppended = false;
+      if (googleToken) {
+        try {
+          await appendToGoogleSheet(googleToken, formData);
+          wasAppended = true;
+          setSheetsAppendedStatus(true);
+        } catch (sheetErr: any) {
+          console.error(sheetErr);
+          setSheetsErrorMsg(`Guardado en correo juan@dejabu.ec, pero falló carga a Sheets: ${sheetErr.message || sheetErr}`);
+          setSheetsAppendedStatus(false);
+        }
+      }
+
+      if (data.success) {
+        setSuccess(true);
+        // Clear inputs after success, keep plan set to profesional
+        setFormData({
+          name: '',
+          email: '',
+          phone: '',
+          plan: 'profesional',
+          details: '',
+        });
+        onClearPrefilled();
+      } else {
+        setErrorMessage(data.message || 'Error al enviar.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage('Upps, no logramos conectar con el servidor de correos instantáneos. Intenta nuevamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <section id="contacto" className="relative py-24 md:py-32 bg-[#050913] border-t border-white/5">
+      {/* Decorative fluorescent light */}
+      <div className="absolute bottom-0 right-0 w-[500px] h-[300px] bg-lime-ai/5 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-violet-ai/5 rounded-full blur-[120px] pointer-events-none" />
+
+      <div className="layout-container relative z-10">
+        
+        {/* Title */}
+        <div className="max-w-3xl mx-auto text-center mb-16">
+          <span className="font-mono text-xs text-lime-ai font-bold tracking-widest uppercase bg-lime-ai/10 border border-lime-ai/20 px-3 py-1 rounded-full">
+            COTIZAR AHORA
+          </span>
+          <h2 className="font-display text-4xl sm:text-5xl font-extrabold tracking-tight text-white mt-6 mb-4">
+            Empecemos tu Sitio Web
+          </h2>
+          <p className="font-sans text-base text-[#cbc3da] leading-[1.6]">
+            Envíanos un mensaje directo. Responderemos en menos de 2 horas con tu fecha exacta de entrega.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-stretch max-w-6xl mx-auto">
+          
+          {/* Info Side (juan@dejabu.ec details) */}
+          <div className="lg:col-span-4 flex flex-col justify-between space-y-8 bg-white/[0.01] border border-white/5 rounded-2xl p-8 glassmorphic">
+            <div className="space-y-6 text-left">
+              <h3 className="font-display text-xl font-bold text-white mb-2">Canales Directos</h3>
+              <p className="text-sm font-sans text-[#cbc3da] leading-relaxed">
+                ¿Prefieres conversar por correo o necesitas enviar material de marca adjunto como logotipos o brief PDF? Contáctanos de forma inmediata.
+              </p>
+
+              <div className="space-y-4 pt-4">
+                <a
+                  href="mailto:juan@dejabu.ec"
+                  className="flex items-center space-x-3.5 text-[#cebdff] hover:text-white transition-colors group"
+                >
+                  <div className="w-10 h-10 rounded bg-[#cebdff]/10 border border-[#cebdff]/20 flex items-center justify-center shrink-0">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-mono tracking-wider text-white/40 uppercase">CORREO DE VENTAS</p>
+                    <p className="font-sans font-medium text-sm group-hover:underline">juan@dejabu.ec</p>
+                  </div>
+                </a>
+
+                <div className="flex items-center space-x-3.5 text-white/85">
+                  <div className="w-10 h-10 rounded bg-lime-ai/10 border border-lime-ai/20 flex items-center justify-center shrink-0 text-lime-ai">
+                    <Phone className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-mono tracking-wider text-white/40 uppercase">SOPORTE 24/7</p>
+                    <p className="font-sans font-medium text-sm">+593 99 999 9999</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Testing Google Sheets Connection Widget */}
+              <div className="pt-6 border-t border-white/5 text-left space-y-3">
+                <span className="text-[10px] font-mono text-lime-ai font-bold uppercase tracking-wider block flex items-center gap-1">
+                  <Database className="w-3 h-3 text-lime-ai shrink-0" /> INTEGRACIÓN DE GOOGLE SHEETS
+                </span>
+                <p className="text-xs text-[#cbc3da] font-sans leading-relaxed">
+                  Conéctate y realiza una prueba en vivo. Los leads se subirán directo en tu hoja de cálculo.
+                </p>
+
+                {googleUser ? (
+                  <div className="bg-lime-ai/5 border border-lime-ai/20 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-lime-ai animate-pulse shrink-0" />
+                      <span className="text-xs font-semibold text-white truncate block max-w-[180px]">
+                        {googleUser.email}
+                      </span>
+                    </div>
+
+                    <a
+                      href="https://docs.google.com/spreadsheets/d/15d4gh2gsSPK9KdddxPlA836VheJ3KCdzMWqrmbSlMoQ/edit"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center space-x-1.5 text-[11px] font-mono font-bold text-lime-ai hover:underline"
+                    >
+                      <span>➔ VER HOJA EN VIVO</span>
+                    </a>
+
+                    <div>
+                      <button
+                        type="button"
+                        onClick={handleGoogleSignOut}
+                        className="text-[10px] text-white/40 hover:text-white/60 underline cursor-pointer"
+                      >
+                        Cerrar sesión de Google
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={handleGoogleSignIn}
+                      disabled={isSheetsLoading}
+                      className="w-full bg-[#111420] border border-white/10 hover:border-lime-ai/30 text-white font-mono text-[9px] font-bold py-3 px-3 rounded flex items-center justify-center space-x-2 transition-all cursor-pointer hover:bg-white/[0.02]"
+                    >
+                      {isSheetsLoading ? (
+                        <span>CONECTANDO...</span>
+                      ) : (
+                        <>
+                          <span>CONECTAR GOOGLE SHEETS</span>
+                        </>
+                      )}
+                    </button>
+                    {sheetsSuccessMessage && (
+                      <p className="text-[10px] text-lime-ai font-mono leading-tight">{sheetsSuccessMessage}</p>
+                    )}
+                    {sheetsErrorMsg && (
+                      <p className="text-[10px] text-red-400 font-mono leading-tight">{sheetsErrorMsg}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-white/5 text-left">
+              <span className="text-[10px] font-mono text-lime-ai font-bold uppercase tracking-wider">ENTREGA SEGURA</span>
+              <p className="text-xs text-white/40 font-sans mt-1 leading-relaxed">
+                Todos los datos transmitidos a través de este canal de ventas son gobernados de forma confidencial para el diseño y entrega en 48 horas.
+              </p>
+            </div>
+          </div>
+
+          {/* Form Side */}
+          <div className="lg:col-span-8 bg-white/[0.03] border border-white/5 rounded-2xl p-6 sm:p-8 glassmorphic relative">
+            
+            {success ? (
+              <div className="absolute inset-0 bg-void/95 flex flex-col items-center justify-center p-8 rounded-2xl z-20 text-center animate-fadeIn">
+                <div className="w-16 h-16 rounded-full bg-lime-ai/10 border border-lime-ai/30 text-lime-ai flex items-center justify-center mb-6">
+                  <Send className="w-6 h-6 animate-pulse" />
+                </div>
+                <h3 className="font-display text-2xl font-extrabold text-white mb-3">¡Mensaje Enviado con Éxito!</h3>
+                <p className="text-sm font-sans text-[#cbc3da] max-w-md mb-6 leading-relaxed">
+                  Tu solicitud ha sido transmitida de forma segura a <strong>juan@dejabu.ec</strong>. Estamos asignando tu diseñador y redactores de inmediato para empezar el proyecto.
+                </p>
+
+                {sheetsAppendedStatus === true && (
+                  <div className="bg-lime-ai/10 border border-lime-ai/20 text-lime-ai text-xs font-mono py-2 px-4 rounded-lg mb-8 max-w-md flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-lime-ai animate-ping" />
+                    <span>¡Fila añadida exitosamente en Google Sheets en tiempo real!</span>
+                  </div>
+                )}
+                
+                {sheetsAppendedStatus === false && (
+                  <div className="bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-mono py-2 px-4 rounded-lg mb-8 max-w-md">
+                    <span>Ocurrió un error al cargar los datos a Google Sheets. Revisa los permisos de la cuenta.</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSuccess(false);
+                    setSheetsAppendedStatus(null);
+                  }}
+                  className="bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold text-xs py-2.5 px-6 rounded transition-all cursor-pointer"
+                >
+                  Volver al Formulario
+                </button>
+              </div>
+            ) : null}
+
+            <form onSubmit={handleSubmit} className="space-y-6 text-left">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Name */}
+                <div>
+                  <label htmlFor="name" className="block text-[11px] font-mono uppercase tracking-wider text-white/50 mb-2 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5" /> Nombre Completo
+                  </label>
+                  <input
+                    id="name"
+                    name="name"
+                    type="text"
+                    required
+                    placeholder="Tu nombre completo"
+                    value={formData.name}
+                    onChange={handleChange}
+                    className="w-full bg-black/30 border-b border-white/20 focus:border-lime-ai py-3 px-1 text-white text-sm outline-none transition-all duration-300 rounded"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label htmlFor="email" className="block text-[11px] font-mono uppercase tracking-wider text-white/50 mb-2 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5" /> Correo Electrónico
+                  </label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    required
+                    placeholder="ej. contacto@tuempresa.com"
+                    value={formData.email}
+                    onChange={handleChange}
+                    className="w-full bg-black/30 border-b border-white/20 focus:border-lime-ai py-3 px-1 text-white text-sm outline-none transition-all duration-300 rounded"
+                  />
+                </div>
+
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Phone */}
+                <div>
+                  <label htmlFor="phone" className="block text-[11px] font-mono uppercase tracking-wider text-white/50 mb-2 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5" /> Teléfono / WhatsApp
+                  </label>
+                  <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    required
+                    placeholder="ej. +593 999 999 999"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    className="w-full bg-black/30 border-b border-white/20 focus:border-lime-ai py-3 px-1 text-white text-sm outline-none transition-all duration-300 rounded"
+                  />
+                </div>
+
+                {/* Plan dropdown selection */}
+                <div>
+                  <label htmlFor="plan" className="block text-[11px] font-mono uppercase tracking-wider text-white/50 mb-2 flex items-center gap-1.5">
+                    <CheckSquare className="w-3.5 h-3.5" /> Plan Deseado
+                  </label>
+                  <select
+                    id="plan"
+                    name="plan"
+                    value={formData.plan}
+                    onChange={handleChange}
+                    className="w-full bg-[#12141c] border-b border-white/20 focus:border-lime-ai py-3 px-2 text-white text-sm outline-none transition-all duration-300 rounded cursor-pointer"
+                  >
+                    <option value="esencial">Plan Esencial — $299</option>
+                    <option value="profesional">Plan Profesional — $599 (Recomendado)</option>
+                    <option value="enterprise">Plan Enterprise — Consultar</option>
+                  </select>
+                </div>
+
+              </div>
+
+              {/* Details Brief */}
+              <div>
+                <label htmlFor="details" className="block text-[11px] font-mono uppercase tracking-wider text-white/50 mb-2 flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5" /> Detalles del Proyecto / Idea de Negocio
+                </label>
+                <textarea
+                  id="details"
+                  name="details"
+                  rows={4}
+                  placeholder="ej. Necesito promocionar mis servicios de consultoría legal rápida para pymes, incluir agendamiento de citas telefónicas y pasarela de pago inicial..."
+                  value={formData.details}
+                  onChange={handleChange}
+                  className="w-full bg-black/30 border-b border-white/20 focus:border-lime-ai py-3 px-1 text-white text-sm outline-none transition-all duration-300 rounded resize-none"
+                />
+                {prefilledDetails && (
+                  <p className="text-[10px] text-lime-ai font-mono mt-2 animate-pulse">
+                    * Tu estructura recomendada por IA ha sido precargada automáticamente.
+                  </p>
+                )}
+              </div>
+
+              {errorMessage && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded">
+                  {errorMessage}
+                </div>
+              )}
+
+              {/* Submit button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-lime-ai hover:bg-lime-ai/90 disabled:bg-lime-ai/40 text-void font-extrabold text-xs py-4 px-8 rounded hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-lg shadow-lime-ai/20"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-void mr-2" />
+                    <span>ENVIANDO...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>ENVIAR SOLICITUD</span>
+                    <Send className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+
+            </form>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+  );
+}
