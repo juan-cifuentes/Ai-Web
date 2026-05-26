@@ -1,23 +1,37 @@
-name: Desplegar desde AI Studio
+name: Compilar y Desplegar en cPanel
 
 on:
   push:
     branches:
-      - main  # <-- Si tu rama se llama master, cambia "main" por "master"
+      - main  # Se ejecuta cada vez que haces commit a la rama principal
 
 jobs:
-  web-deploy:
-    name: Subiendo archivos nuevos a BanaHosting
+  build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: 1. Obtener codigo de GitHub
+    # 1. Descargar el código del repositorio
+    - name: Checkout code
       uses: actions/checkout@v4
-    
-    - name: 2. Sincronizar archivos via FTP
-      uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+
+    # 2. Configurar el entorno de Node.js
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    # 3. Instalar dependencias y compilar el sitio de Vite
+    - name: Install and Build
+      run: |
+        npm install
+        npm run build
+
+    # 4. Subir la carpeta compilada (dist) a cPanel vía FTP
+    - name: Deploy via FTP
+      uses: SamKirkland/FTP-Deploy-Action@v4.3.5
       with:
         server: ${{ secrets.FTP_SERVER }}
         username: ${{ secrets.FTP_USERNAME }}
         password: ${{ secrets.FTP_PASSWORD }}
-        local-dir: ./
+        local-dir: ./dist/  # Carpeta generada por Vite que contiene el index.html listo
+        server-dir: /public_html/  # Cambia esto si tu sitio está en una subcarpeta
