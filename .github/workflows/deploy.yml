@@ -3,35 +3,35 @@ name: Compilar y Desplegar en cPanel
 on:
   push:
     branches:
-      - main  # Se ejecuta cada vez que haces commit a la rama principal
+      - main  # Se ejecuta automáticamente cada vez que haces commit a la rama principal
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Descargar el código del repositorio
+    # 1. Descargar el código fuente desde tu repositorio de GitHub
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # 2. Configurar el entorno de Node.js
+    # 2. Configurar el entorno de Node.js en el servidor virtual
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
 
-    # 3. Instalar dependencias y compilar el sitio de Vite
+    # 3. Instalar las dependencias y compilar el sitio web de Vite
     - name: Install and Build
       run: |
         npm install
         npm run build
 
-    # 4. Subir la carpeta compilada (dist) a cPanel vía FTP
+    # 4. Subir el contenido de la carpeta 'dist' directamente a la raíz del FTP
     - name: Deploy via FTP
       uses: SamKirkland/FTP-Deploy-Action@v4.3.5
       with:
         server: ${{ secrets.FTP_SERVER }}
         username: ${{ secrets.FTP_USERNAME }}
         password: ${{ secrets.FTP_PASSWORD }}
-        local-dir: ./dist/  # Carpeta generada por Vite que contiene el index.html listo
-        server-dir: /public_html/  # Cambia esto si tu sitio está en una subcarpeta
+        local-dir: ./dist/  # Extrae solo el contenido dentro de dist (index.html, assets, etc.)
+        server-dir: ./      # Lo deposita directo en la raíz de conexión del FTP sin crear subcarpetas
