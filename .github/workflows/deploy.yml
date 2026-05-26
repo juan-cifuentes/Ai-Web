@@ -1,0 +1,23 @@
+name: Desplegar desde AI Studio
+
+on:
+  push:
+    branches:
+      - main  # <-- Si tu rama se llama master, cambia "main" por "master"
+
+jobs:
+  web-deploy:
+    name: Subiendo archivos nuevos a BanaHosting
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 1. Obtener codigo de GitHub
+      uses: actions/checkout@v4
+    
+    - name: 2. Sincronizar archivos via FTP
+      uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      with:
+        server: ${{ secrets.FTP_SERVER }}
+        username: ${{ secrets.FTP_USERNAME }}
+        password: ${{ secrets.FTP_PASSWORD }}
+        local-dir: ./
