@@ -94,7 +94,7 @@ export default function ContactForm({ selectedPlan, prefilledDetails, onClearPre
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setErrorMessage('');
@@ -103,25 +103,31 @@ export default function ContactForm({ selectedPlan, prefilledDetails, onClearPre
     setSuccess(false);
 
     try {
-      // 1. Submit to local Express server configuration
-      const response = await fetch('/api/contact', {
+      // 1. Submit to FormSubmit ajax/juan@dejabu.ec configuration
+      const formBody = new FormData();
+      formBody.append('name', formData.name);
+      formBody.append('email', formData.email);
+      formBody.append('phone', formData.phone);
+      formBody.append('plan', formData.plan);
+      formBody.append('details', formData.details);
+      formBody.append('_captcha', 'false');
+      formBody.append('_honey', (e.target as any)._honey?.value || '');
+
+      const response = await fetch('https://formsubmit.co/ajax/juan@dejabu.ec', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: formBody,
       });
 
       if (!response.ok) {
         throw new Error('Hubo un error con el servidor.');
       }
 
-      const data = await response.json();
+      await response.json();
       
       // 2. Append to Google Sheets if token exists
-      let wasAppended = false;
       if (googleToken) {
         try {
           await appendToGoogleSheet(googleToken, formData);
-          wasAppended = true;
           setSheetsAppendedStatus(true);
         } catch (sheetErr: any) {
           console.error(sheetErr);
@@ -130,20 +136,16 @@ export default function ContactForm({ selectedPlan, prefilledDetails, onClearPre
         }
       }
 
-      if (data.success) {
-        setSuccess(true);
-        // Clear inputs after success, keep plan set to profesional
-        setFormData({
-          name: '',
-          email: '',
-          phone: '',
-          plan: 'profesional',
-          details: '',
-        });
-        onClearPrefilled();
-      } else {
-        setErrorMessage(data.message || 'Error al enviar.');
-      }
+      setSuccess(true);
+      // Clear inputs after success, keep plan set to profesional
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        plan: 'profesional',
+        details: '',
+      });
+      onClearPrefilled();
     } catch (err: any) {
       console.error(err);
       setErrorMessage('Upps, no logramos conectar con el servidor de correos instantáneos. Intenta nuevamente.');
@@ -320,6 +322,17 @@ export default function ContactForm({ selectedPlan, prefilledDetails, onClearPre
             ) : null}
 
             <form onSubmit={handleSubmit} className="space-y-6 text-left">
+              {/* FormSubmit configurations */}
+              <input type="hidden" name="_captcha" value="false" />
+              <input
+                type="text"
+                name="_honey"
+                tabIndex={-1}
+                className="absolute opacity-0 pointer-events-none w-0 h-0"
+                style={{ position: 'absolute', top: 0, left: 0, zIndex: -10 }}
+                placeholder="Spam prevention honeypot"
+              />
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
                 {/* Name */}
