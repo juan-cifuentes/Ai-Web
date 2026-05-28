@@ -33,7 +33,13 @@ export default function ContactForm({ selectedPlan, prefilledDetails, onClearPre
 
   // Google Apps Script state
   const [appsScriptUrl, setAppsScriptUrl] = useState(() => {
-    return localStorage.getItem('apps_script_url') || (import.meta as any).env?.VITE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbynXBqL69UYfAlo2gsAB8tfnWu9tFc0JtT5ieByM8Jm5TwAXlHhATAvWM8QJZQIbMn8jQ/exec';
+    const stored = localStorage.getItem('apps_script_url');
+    const oldUrl = 'https://script.google.com/macros/s/AKfycbynXBqL69UYfAlo2gsAB8tfnWu9tFc0JtT5ieByM8Jm5TwAXlHhATAvWM8QJZQIbMn8jQ/exec';
+    if (stored === oldUrl) {
+      localStorage.removeItem('apps_script_url');
+      return (import.meta as any).env?.VITE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwXKFw3auGPldk6OLtqVLYXBhfuASiJNHTGyhQUHQUtcn1CJjzuGZ-UUco7h0eUm4tQFA/exec';
+    }
+    return stored || (import.meta as any).env?.VITE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwXKFw3auGPldk6OLtqVLYXBhfuASiJNHTGyhQUHQUtcn1CJjzuGZ-UUco7h0eUm4tQFA/exec';
   });
   const [gasAppendedStatus, setGasAppendedStatus] = useState<boolean | null>(null);
   const [gasErrorMsg, setGasErrorMsg] = useState('');
