@@ -31,6 +31,14 @@ export default function ContactForm({ selectedPlan, prefilledDetails, onClearPre
   const [sheetsErrorMsg, setSheetsErrorMsg] = useState('');
   const [sheetsAppendedStatus, setSheetsAppendedStatus] = useState<boolean | null>(null);
 
+  // Google Apps Script state
+  const [appsScriptUrl, setAppsScriptUrl] = useState(() => {
+    return localStorage.getItem('apps_script_url') || (import.meta as any).env?.VITE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbynXBqL69UYfAlo2gsAB8tfnWu9tFc0JtT5ieByM8Jm5TwAXlHhATAvWM8QJZQIbMn8jQ/exec';
+  });
+  const [gasAppendedStatus, setGasAppendedStatus] = useState<boolean | null>(null);
+  const [gasErrorMsg, setGasErrorMsg] = useState('');
+  const [gasSavedSuccessMsg, setGasSavedSuccessMsg] = useState('');
+
   // Initialize Auth state listener
   useEffect(() => {
     const unsubscribe = initAuth(
@@ -100,6 +108,8 @@ export default function ContactForm({ selectedPlan, prefilledDetails, onClearPre
     setErrorMessage('');
     setSheetsErrorMsg('');
     setSheetsAppendedStatus(null);
+    setGasErrorMsg('');
+    setGasAppendedStatus(null);
     setSuccess(false);
 
     try {
@@ -133,6 +143,38 @@ export default function ContactForm({ selectedPlan, prefilledDetails, onClearPre
           console.error(sheetErr);
           setSheetsErrorMsg(`Guardado en correo juan@dejabu.ec, pero falló carga a Sheets: ${sheetErr.message || sheetErr}`);
           setSheetsAppendedStatus(false);
+        }
+      }
+
+      // 3. Append to Google Sheets via Google Apps Script if URL exists
+      if (appsScriptUrl) {
+        try {
+          const payload = {
+            name: formData.name,
+            nombre: formData.name,
+            email: formData.email,
+            phone: formData.phone,
+            telefono: formData.phone,
+            plan: formData.plan,
+            details: formData.details,
+            detalles: formData.details
+          };
+
+          // We use Content-Type: text/plain to bypass browser CORS preflight requests
+          await fetch(appsScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8'
+            },
+            body: JSON.stringify(payload)
+          });
+
+          setGasAppendedStatus(true);
+        } catch (gasErr: any) {
+          console.error("Error al guardar en Google Apps Script:", gasErr);
+          setGasErrorMsg(`Guardado en FormSubmit pero falló Apps Script: ${gasErr.message || gasErr}`);
+          setGasAppendedStatus(false);
         }
       }
 
@@ -211,66 +253,104 @@ export default function ContactForm({ selectedPlan, prefilledDetails, onClearPre
               </div>
 
               {/* Live Testing Google Sheets Connection Widget */}
-              <div className="pt-6 border-t border-white/5 text-left space-y-3">
+              <div className="pt-6 border-t border-white/5 text-left space-y-4">
                 <span className="text-[10px] font-mono text-lime-ai font-bold uppercase tracking-wider block flex items-center gap-1">
-                  <Database className="w-3 h-3 text-lime-ai shrink-0" /> INTEGRACIÓN DE GOOGLE SHEETS
+                  <Database className="w-3 h-3 text-lime-ai shrink-0" /> INTEGRACIÓN GOOGLE SHEETS
                 </span>
-                <p className="text-xs text-[#cbc3da] font-sans leading-relaxed">
-                  Conéctate y realiza una prueba en vivo. Los leads se subirán directo en tu hoja de cálculo.
-                </p>
-
-                {googleUser ? (
-                  <div className="bg-lime-ai/5 border border-lime-ai/20 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-lime-ai animate-pulse shrink-0" />
-                      <span className="text-xs font-semibold text-white truncate block max-w-[180px]">
-                        {googleUser.email}
-                      </span>
+                
+                <div className="space-y-4">
+                  {/* Opción A: Google Apps Script Web App */}
+                  <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold font-mono text-white/80">OPCIÓN A: APPS SCRIPT (Recomendado)</span>
+                      <span className="text-[8px] font-mono text-lime-ai bg-lime-ai/10 border border-lime-ai/20 px-1.5 py-0.5 rounded uppercase font-bold">Sin Login</span>
                     </div>
-
-                    <a
-                      href="https://docs.google.com/spreadsheets/d/15d4gh2gsSPK9KdddxPlA836VheJ3KCdzMWqrmbSlMoQ/edit"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center space-x-1.5 text-[11px] font-mono font-bold text-lime-ai hover:underline"
-                    >
-                      <span>➔ VER HOJA EN VIVO</span>
-                    </a>
-
+                    <p className="text-xs text-[#cbc3da] font-sans leading-relaxed">
+                      Sube prospectos en tiempo real sin obligar a tus visitas a iniciar sesión de Google.
+                    </p>
                     <div>
-                      <button
-                        type="button"
-                        onClick={handleGoogleSignOut}
-                        className="text-[10px] text-white/40 hover:text-white/60 underline cursor-pointer"
-                      >
-                        Cerrar sesión de Google
-                      </button>
+                      <label className="block text-[9px] font-mono text-white/40 mb-1.5 uppercase">URL DE WEB APP DE GOOGLE</label>
+                      <input
+                        type="text"
+                        value={appsScriptUrl}
+                        onChange={(e) => {
+                          setAppsScriptUrl(e.target.value);
+                          localStorage.setItem('apps_script_url', e.target.value);
+                        }}
+                        placeholder="https://script.google.com/macros/s/.../exec"
+                        className="w-full bg-black/40 border border-white/10 rounded px-2 py-2 text-xs text-white font-mono placeholder-white/20 focus:border-lime-ai focus:outline-none transition-all"
+                      />
                     </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={handleGoogleSignIn}
-                      disabled={isSheetsLoading}
-                      className="w-full bg-[#111420] border border-white/10 hover:border-lime-ai/30 text-white font-mono text-[9px] font-bold py-3 px-3 rounded flex items-center justify-center space-x-2 transition-all cursor-pointer hover:bg-white/[0.02]"
-                    >
-                      {isSheetsLoading ? (
-                        <span>CONECTANDO...</span>
-                      ) : (
-                        <>
-                          <span>CONECTAR GOOGLE SHEETS</span>
-                        </>
-                      )}
-                    </button>
-                    {sheetsSuccessMessage && (
-                      <p className="text-[10px] text-lime-ai font-mono leading-tight">{sheetsSuccessMessage}</p>
-                    )}
-                    {sheetsErrorMsg && (
-                      <p className="text-[10px] text-red-400 font-mono leading-tight">{sheetsErrorMsg}</p>
+                    {appsScriptUrl ? (
+                      <div className="flex items-center gap-1.5 text-[9px] font-mono text-lime-ai">
+                        <span className="w-1.5 h-1.5 rounded-full bg-lime-ai animate-pulse" />
+                        <span>Apps Script configurado correctamente</span>
+                      </div>
+                    ) : (
+                      <div className="text-[10px] font-sans text-amber-300/75 leading-relaxed">
+                        ⚠️ Inserta la URL de tu Web App arriba para registrar tus leads directamente.
+                      </div>
                     )}
                   </div>
-                )}
+
+                  {/* Opción B: API directa OAuth */}
+                  <div className="bg-white/[0.01] border border-white/5 rounded-xl p-4 space-y-3">
+                    <span className="text-[10px] font-bold font-mono text-white/80 block">OPCIÓN B: API DIRECTA OAUTH</span>
+                    <p className="text-xs text-[#cbc3da] font-sans leading-relaxed">
+                      Especial para pruebas rápidas de conexión directa del propietario desde el navegador.
+                    </p>
+
+                    {googleUser ? (
+                      <div className="bg-lime-ai/5 border border-lime-ai/20 rounded-xl p-3 space-y-2">
+                        <div className="flex items-center space-x-2 justify-between">
+                          <div className="flex items-center space-x-2 overflow-hidden">
+                            <span className="w-1.5 h-1.5 rounded-full bg-lime-ai animate-pulse shrink-0" />
+                            <span className="text-xs font-semibold text-white truncate block max-w-[130px]">
+                              {googleUser.email}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleGoogleSignOut}
+                            className="text-[9px] text-red-400 hover:text-red-300 underline cursor-pointer shrink-0"
+                          >
+                            Cerrar
+                          </button>
+                        </div>
+
+                        <a
+                          href="https://docs.google.com/spreadsheets/d/15d4gh2gsSPK9KdddxPlA836VheJ3KCdzMWqrmbSlMoQ/edit"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center space-x-1 text-[10px] font-mono font-bold text-lime-ai hover:underline"
+                        >
+                          <span>➔ VER HOJA EN VIVO</span>
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={handleGoogleSignIn}
+                          disabled={isSheetsLoading}
+                          className="w-full bg-[#111420] border border-white/10 hover:border-lime-ai/30 text-white font-mono text-[9px] font-bold py-2.5 px-3 rounded flex items-center justify-center space-x-2 transition-all cursor-pointer hover:bg-white/[0.02]"
+                        >
+                          {isSheetsLoading ? (
+                            <span>CONECTANDO...</span>
+                          ) : (
+                            <span>CONECTAR OAUTH DIRECTO</span>
+                          )}
+                        </button>
+                        {sheetsSuccessMessage && (
+                          <p className="text-[10px] text-lime-ai font-mono leading-tight">{sheetsSuccessMessage}</p>
+                        )}
+                        {sheetsErrorMsg && (
+                          <p className="text-[10px] text-red-400 font-mono leading-tight">{sheetsErrorMsg}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -296,15 +376,28 @@ export default function ContactForm({ selectedPlan, prefilledDetails, onClearPre
                 </p>
 
                 {sheetsAppendedStatus === true && (
-                  <div className="bg-lime-ai/10 border border-lime-ai/20 text-lime-ai text-xs font-mono py-2 px-4 rounded-lg mb-8 max-w-md flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-lime-ai animate-ping" />
-                    <span>¡Fila añadida exitosamente en Google Sheets en tiempo real!</span>
+                  <div className="bg-lime-ai/10 border border-lime-ai/20 text-lime-ai text-xs font-mono py-2.5 px-4 rounded-lg mb-2 max-w-md flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-lime-ai animate-pulse" />
+                    <span>¡Fila añadida vía Google API (OAuth)!</span>
                   </div>
                 )}
                 
+                {gasAppendedStatus === true && (
+                  <div className="bg-lime-ai/10 border border-lime-ai/20 text-lime-ai text-xs font-mono py-2.5 px-4 rounded-lg mb-4 max-w-md flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-lime-ai animate-pulse" />
+                    <span>¡Fila añadida vía Google Apps Script!</span>
+                  </div>
+                )}
+
                 {sheetsAppendedStatus === false && (
-                  <div className="bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-mono py-2 px-4 rounded-lg mb-8 max-w-md">
-                    <span>Ocurrió un error al cargar los datos a Google Sheets. Revisa los permisos de la cuenta.</span>
+                  <div className="bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-mono py-2.5 px-4 rounded-lg mb-2 max-w-md">
+                    <span>Ocurrió un error al cargar vía API Google (OAuth).</span>
+                  </div>
+                )}
+
+                {gasAppendedStatus === false && (
+                  <div className="bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-mono py-2.5 px-4 rounded-lg mb-4 max-w-md">
+                    <span>{gasErrorMsg || 'Error al cargar vía Google Apps Script.'}</span>
                   </div>
                 )}
 
@@ -313,8 +406,9 @@ export default function ContactForm({ selectedPlan, prefilledDetails, onClearPre
                   onClick={() => {
                     setSuccess(false);
                     setSheetsAppendedStatus(null);
+                    setGasAppendedStatus(null);
                   }}
-                  className="bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold text-xs py-2.5 px-6 rounded transition-all cursor-pointer"
+                  className="bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold text-xs py-2.5 px-6 rounded transition-all cursor-pointer mt-2"
                 >
                   Volver al Formulario
                 </button>
